@@ -1,0 +1,15 @@
+.idea/*
+cmd/test/*
+*.exe
+*.pk
+*.txt
+*.bak
+*.orig
+*.rej
+*.patch
+*.dat
+cmd/jight/jight
+cmd/jightd/jightd
+cmd/jight/wallet_self.dat
+cmd/jightd/Jightdb*
+dagchain/Testdb/
