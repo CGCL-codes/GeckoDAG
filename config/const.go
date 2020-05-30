@@ -13,7 +13,7 @@ const NETWORK_LATENCY int = 10
 
 // TODO genesis tx value
 const GENESIS_VALUE int = 1000
-const GENESIS_ADDR_COUNT int = 10
+const GENESIS_ADDR_COUNT int = 1000
 const TIPS_COUNT int = 240
 
 const MERGE_PERIOD int = 100
