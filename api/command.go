@@ -123,7 +123,7 @@ func (cmd *CMD) Run() {
 			Usage: "Create batch transactions to test confirmation latency",
 			Flags: []cli.Flag{
 				cli.IntFlag{Name: "times, t", Usage: "how many times to create batch transactions"},
-				cli.IntFlag{Name: "speed, s", Usage: "speed to issue transactions by all the system, s transactions/min"},
+				cli.IntFlag{Name: "speed, s", Usage: "speed to issue transactions by all the system, s transactions/sec"},
 			},
 			Action: func(c *cli.Context) error {
 				times := c.Int("times")
