@@ -203,6 +203,12 @@ func (jd *Jightd) CreateBatchTxs (cmd CreateBatchTxsCMD, reply *CreateBatchTxsRe
 			jd.DC.AddGT(gt, lastTC, isTU,true)
 			p2p.SyncGT(gt)
 			dagchain.GXs[gt.FetchNumber()] = gt
+
+			// if it is a transaction union, prune the old transactions
+			if isTU {
+				senderAccount := dagchain.AccountMap[r1]
+				dagchain.PruneOldTxs(jd.DC, senderAccount)
+			}
 		}
 		//fmt.Println("Txs: ")
 		//for _, tx := range transaction.Txs {
