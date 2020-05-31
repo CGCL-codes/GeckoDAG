@@ -187,17 +187,20 @@ func (jd *Jightd) CreateBatchTxs (cmd CreateBatchTxsCMD, reply *CreateBatchTxsRe
 			wallet := ws.GetWallet(fromAccount)
 
 			dagchain.AccountMap[r1].TxCount++
-			var gt dagchain.GeneralTx
+			/*var gt dagchain.GeneralTx
 			var tc *dagchain.TxContent
 			if dagchain.AccountMap[r1].TxCount % config.MERGE_PERIOD != 0 {
 				gt = jd.DC.CreateTx(wallet.PrivateKey, [32]byte{}, fromAccount, toAccount, r1, r2, 0)
 			} else {
 				gt, tc = jd.DC.CreateTU(wallet.PrivateKey, [32]byte{}, fromAccount, toAccount, r1, r2, 0)
-			}
+			}*/
+
+			gt, lastTC, isTU := jd.DC.CreateGT(wallet.PrivateKey, [32]byte{}, fromAccount, toAccount,
+				r1, r2, 0)
 
 
 
-			jd.DC.AddGT(gt, tc, false,true)
+			jd.DC.AddGT(gt, lastTC, isTU,true)
 			p2p.SyncGT(gt)
 			dagchain.GXs[gt.FetchNumber()] = gt
 		}
