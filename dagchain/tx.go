@@ -218,12 +218,8 @@ func (tx Transaction) HashTx() [32]byte {
 
 // Sign a tx with private key
 func (tx *Transaction) Sign(privKey ecdsa.PrivateKey) {
-	log.Println("--------- in function Sign() -------")
 	if tx.IsGenesisTx() {
-		log.Println("tx is a genesis")
 		return
-	} else {
-		log.Println("tx is not a genesis")
 	}
 
 	// TODO not complete copy
@@ -666,7 +662,7 @@ func PruneOldTxs(dc *DagChain, acc *Account) error {
 	txsByAccount := acc.WithoutPruneIds
 	var toPruneNum = make(map[int]bool)
 	for _, tn := range txsByAccount {
-		log.Printf("tx in txsByAccount: %d", tn)
+		//log.Printf("tx in txsByAccount: %d", tn)
 		if GXs[tn].FetchCitedCount() == 0 {
 			if dc.Tips[tn] == nil {
 				toPruneNum[tn] = true

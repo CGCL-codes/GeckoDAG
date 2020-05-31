@@ -423,20 +423,20 @@ func (dc *DagChain) SelectTips(senderNo int) ([2]int, [2]*Tip) {
 		tipsSlice[i] = n
 		i++
 	}
-	log.Printf("alltips: %v\n", allTips)
+	//log.Printf("alltips: %v\n", allTips)
 
 	var twoTips [2]*Tip
 	var index [2]int
 
 	rand.Seed(time.Now().UnixNano())
 	first := rand.Intn(len(allTips))
-	log.Printf("first: %d\n", first)
+	//log.Printf("first: %d\n", first)
 
 	firstTipNum := tipsSlice[first]
 
-	log.Printf("firstTipNum: %d\n", firstTipNum)
+	//log.Printf("firstTipNum: %d\n", firstTipNum)
 
-	log.Printf("allTips[firstTipNum].TxNum: %d\n", allTips[firstTipNum].TxNum)
+	//log.Printf("allTips[firstTipNum].TxNum: %d\n", allTips[firstTipNum].TxNum)
 
 	for GXs[allTips[firstTipNum].TxNum].FetchSenderNum() == senderNo {
 		first = rand.Intn(len(allTips))

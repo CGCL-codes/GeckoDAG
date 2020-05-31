@@ -16,7 +16,7 @@ const GENESIS_VALUE int = 1000
 const GENESIS_ADDR_COUNT int = 1000
 const TIPS_COUNT int = 240
 
-const MERGE_PERIOD int = 100
+const MERGE_PERIOD int = 10
 
 
 // Default data storage location
