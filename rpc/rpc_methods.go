@@ -186,7 +186,7 @@ func (jd *Jightd) CreateBatchTxs (cmd CreateBatchTxsCMD, reply *CreateBatchTxsRe
 
 			wallet := ws.GetWallet(fromAccount)
 
-			dagchain.AccountMap[r1].TxCount++
+			//dagchain.AccountMap[r1].TxCount++
 			/*var gt dagchain.GeneralTx
 			var tc *dagchain.TxContent
 			if dagchain.AccountMap[r1].TxCount % config.MERGE_PERIOD != 0 {
