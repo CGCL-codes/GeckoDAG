@@ -811,12 +811,12 @@ func (dc *DagChainEth) SelectTipsEth(senderNo int64) ([2]int64, [2]*TipEth) {
 
 	log.Printf("allTips[firstTipNum].TxNum: %d\n", allTips[firstTipNum].TxNum)
 
-	for GXsEth[allTips[firstTipNum].TxNum].FetchSenderNum() == senderNo {
+	/*for GXsEth[allTips[firstTipNum].TxNum].FetchSenderNum() == senderNo {
 		first = rand.Intn(len(allTips))
 		firstTipNum = tipsSlice[first]
 		log.Printf("firstTipNum: %d\n", firstTipNum)
 		log.Printf("accFrom: %s\n", AccountEthMap[senderNo].Account)
-	}
+	}*/
 
 	log.Printf("xxxxxxxxxxxxxxxxxxxxxx ")
 	second := rand.Intn(len(allTips))

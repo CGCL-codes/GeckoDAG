@@ -1002,6 +1002,15 @@ func NewTUEth(validateNum [2]int64, acc *AccountEth, income [64]byte, value int,
 	periodValidateNumOriginal[validateNum[0]]=true
 	periodValidateNumOriginal[validateNum[1]]=true
 	//log.Println("periodValidateNumOriginal: ", periodValidateNumOriginal)
+
+	// Deal with a special case: when a tx validate the txs issued by the same person, e.g., (A->B) --validate--> (A->C)
+	for n ,b := range periodValidateNumOriginal {
+		if (GXsEth[n].FetchSenderNum() == acc.AccountNo) && b {
+			periodValidateNumOriginal[n] = false
+			GXsEth[n].DecCitedCount()
+		}
+	}
+
 	var periodValidateNum []int64
 	for n, b := range periodValidateNumOriginal {
 		if b {
