@@ -142,3 +142,16 @@ func SyncGT(gt dagchain.GeneralTx) error {
 	}
 	return nil
 }
+
+func SyncGTEth(gt dagchain.GeneralTxEth) error {
+	bytes, err := json.Marshal(gt)
+	if err!=nil {
+		return err
+	}
+	for k, w := range writerList{
+		w.WriteString(fmt.Sprintf("%s\n", string(bytes)))
+		w.Flush()
+		log.Println(fmt.Sprintf("Finish sending the tx to %d the node", k))
+	}
+	return nil
+}

@@ -8,10 +8,18 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"github.com/syndtr/goleveldb/leveldb"
 	"log"
 	"math/rand"
 	"strconv"
 )
+
+
+var wa *wallet.Wallet
+
+func init() {
+	wa = wallet.NewWallet()
+}
 
 func (jd *Jightd) GetBalance (cmd GetBalanceCMD, reply *GetBalanceReply) error {
 	account, err := dagchain.FetchAccount(jd.DC.DBOthers, cmd.Address)
@@ -101,6 +109,55 @@ func (jd *Jightd) Send (cmd SendCmd, reply *SendReply) error {
 	//fmt.Println()
 	//fmt.Println(dagchain.PrintGXs())
 	//fmt.Println(dagchain.PrintAccounts())
+
+	return nil
+}
+
+func (jd *Jightd) SendEth (cmd SendEthCmd, reply *SendReply) error {
+	fromAccount, err := dagchain.FetchAccountEth(jd.DCEth.DBOthers, cmd.From)
+	if err == leveldb.ErrNotFound {
+		acc := dagchain.CreateNewAccountEth(cmd.From, 1000, true)
+		acc.LastIdNo = dagchain.TxNumEth
+		dagchain.StoreAccountEth(jd.DCEth.DBOthers, *acc)
+		dagchain.SetAccountEthMap(acc)
+		fromAccount = acc
+	}
+
+	toAccount, err := dagchain.FetchAccountEth(jd.DCEth.DBOthers, cmd.To)
+	if err == leveldb.ErrNotFound {
+		acc := dagchain.CreateNewAccountEth(cmd.To, 1000, false)
+		dagchain.StoreAccountEth(jd.DCEth.DBOthers, *acc)
+		dagchain.SetAccountEthMap(acc)
+		toAccount = acc
+	}
+
+	fmt.Printf("From account.AccountNo: %d, To account.AccountNo: %d\n", fromAccount.AccountNo, toAccount.AccountNo)
+	gt, lastTC, isTU := jd.DCEth.CreateGTEth(wa.PrivateKey, [64]byte{}, cmd.From, cmd.To,
+		fromAccount.AccountNo, toAccount.AccountNo, 0)
+
+	fmt.Printf("GTEth number: %d\n", gt.FetchNumber())
+
+	/*for i, gx := range dagchain.GXsEth {
+		if i > 0 {
+			fmt.Printf("The %dth gx is cited by %d times\n", i, gx.FetchCitedCount())
+		}
+	}*/
+
+	reply.Tx = hex.EncodeToString([]byte("justreply"))
+
+	jd.DCEth.AddGTEth(gt, lastTC, isTU, true)
+	p2p.SyncGTEth(gt)
+	dagchain.GXsEth[gt.FetchNumber()] = gt
+
+	// if it is a transaction union, prune the old transactions
+	if isTU {
+		senderAccount := dagchain.AccountEthMap[fromAccount.AccountNo]
+		if senderAccount == nil {
+			log.Printf("Try to prune old txs, while the senderAccount is nil: %d\n", fromAccount.AccountNo)
+		}
+		log.Println("-------------- Prune old txs -------------- ")
+		dagchain.PruneOldTxsEth(jd.DCEth, senderAccount)
+	}
 
 	return nil
 }
@@ -261,6 +318,23 @@ func (jd *Jightd) RefreshTips (cmd RefreshTipsCMD, reply *RefreshTipsReply) erro
 	}
 	jd.DC.Tips = uncitedTips
 	reply.TipsCntAfter = len(jd.DC.Tips)
+	return nil
+}
+
+func (jd *Jightd) RefreshTipsEth (cmd RefreshTipsCMD, reply *RefreshTipsReply) error {
+	reply.TipsCntBefore = len(jd.DCEth.TipsEth)
+	var uncitedTips = make(map[int64]*dagchain.TipEth)
+	//fmt.Println("Original tips: ")
+	for _, t := range jd.DCEth.TipsEth {
+		//fmt.Printf("tip: %d, ver1: %d, ver2: %d, cited: %t, verified: %t\n", t.TxNum, t.VerifyNum[0],
+		//	t.VerifyNum[1], t.Cited, t.Verified)
+		if !t.Cited {
+			//uncitedTips = append(uncitedTips, t)
+			uncitedTips[t.TxNum] = t
+		}
+	}
+	jd.DCEth.TipsEth = uncitedTips
+	reply.TipsCntAfter = len(jd.DCEth.TipsEth)
 	return nil
 }
 

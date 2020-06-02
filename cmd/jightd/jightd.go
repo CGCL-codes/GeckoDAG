@@ -19,6 +19,8 @@ var cmd api.CMDDeamon
 
 var dc *dagchain.DagChain
 
+var dcEth *dagchain.DagChainEth
+
 // initialize the variables from the arguments
 func init() {
 	cmd.Run()
@@ -29,7 +31,7 @@ func init() {
 	}
 	// initiazlie the dagchain
 	var err error
-	dc, err = dagchain.Init()
+	dc, dcEth, err = dagchain.Init()
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -39,9 +41,10 @@ func init() {
 func init() {
 	jd := new(jrpc.Jightd)
 	jd.DC = dc
+	jd.DCEth = dcEth
 	err := rpc.Register(jd)
 	if err != nil {
-		log.Fatal("Format of service Jidard isn't correct.", err)
+		log.Fatal("Format of service Jightd isn't correct.", err)
 	}
 
 	rpc.HandleHTTP()
@@ -98,6 +101,9 @@ func main() {
 	defer dc.DB.Close()
 	defer dc.DBMerging.Close()
 	defer dc.DBOthers.Close()
+	defer dcEth.DB.Close()
+	defer dcEth.DBMerging.Close()
+	defer dcEth.DBOthers.Close()
 	/*tx := transaction.Transaction{
 		Hash: []byte("h1111111111111"),
 		Parent: []byte("p22222222222222"),

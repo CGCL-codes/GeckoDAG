@@ -13,3 +13,4 @@ cmd/jightd/jightd
 cmd/jight/wallet_self.dat
 cmd/jightd/Jightdb*
 dagchain/Testdb/
+cmd/run_eth_data/run_eth_data

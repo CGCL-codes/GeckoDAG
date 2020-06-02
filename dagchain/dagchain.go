@@ -6,6 +6,7 @@ import (
 	"crypto/ecdsa"
 	"encoding/gob"
 	"errors"
+	"fmt"
 	"github.com/syndtr/goleveldb/leveldb"
 	"log"
 	"math/rand"
@@ -28,8 +29,24 @@ type Tip struct {
 	//Account []byte	// Account address of tip
 }
 
+type TipEth struct {
+	TxNum	int64
+	TipID [64]byte	// tip txid
+	Cited bool	// denote if it has been cited by the txs from other nodes
+	Verified bool // indicate if the tip verify the sample transaction
+	//Account []byte	// Account address of tip
+}
+
 type DagChain struct {
 	Tips map[int]*Tip // tips of dagchain, persistence
+	//Account map[string][]byte		// no persistence, reindex at CreateDagChain or RecoverDagChain, to reduce storage costs and speed up FindParent
+	DB *leveldb.DB	// no merging and pruning
+	DBMerging *leveldb.DB  // with merging and pruning
+	DBOthers *leveldb.DB // DB used to store wallet and initialize transactions
+}
+
+type DagChainEth struct {
+	TipsEth map[int64]*TipEth // tips of dagchain, persistence
 	//Account map[string][]byte		// no persistence, reindex at CreateDagChain or RecoverDagChain, to reduce storage costs and speed up FindParent
 	DB *leveldb.DB	// no merging and pruning
 	DBMerging *leveldb.DB  // with merging and pruning
@@ -170,6 +187,138 @@ func (dc *DagChain) AddGT(gt GeneralTx, tc *TxContent, isTU bool, local bool) er
 	return nil
 }
 
+func SetAccountEthMap(acc *AccountEth) {
+	AccountEthMap[acc.AccountNo] = acc
+}
+
+func (dc *DagChainEth) AddGTEth(gt GeneralTxEth, tc *TxContentEth, isTU bool, local bool) error {
+	// verify tx from network
+	if gt.Verify() == false {
+		return errors.New("Tx verify failed, invalid Tx")
+	}
+
+	oldTips:= gt.FetchLatestValidateNum()
+	//var citedChangeTips []*Tip
+	for _, t := range dc.TipsEth {
+		if t.TxNum == oldTips[0] || t.TxNum == oldTips[1] {
+			t.Cited = true
+			//citedChangeTips = append(citedChangeTips, t)
+		}
+	}
+
+	newTip := &TipEth{gt.FetchNumber(), gt.FetchHash(), false, gt.CheckVerification()}
+
+	//dc.Tips = append(dc.Tips, newTip)
+	dc.TipsEth[newTip.TxNum] = newTip
+
+	// write gt to DB
+	// 1.1 write gt to db with no merging and pruning
+	if !isTU {
+		if err := StoreTxEth(dc.DB, gt); err != nil {
+			log.Panic("store tx to db failed: ", err)
+			return err
+		}
+	} else {
+		// if it is a TU, only the single transaction is needed to be stored
+		// for test: a mock transaction is used
+		var mockTx GeneralTxEth =  &TransactionEth{gt.FetchNumber(), [2]int64{1, 2}, config.MOCK_TX_Eth, config.MOCK_TX_Eth,
+			[2][64]byte{config.MOCK_TX_Eth, config.MOCK_TX_Eth}, config.MOCK_TX_Eth,[40]byte{}, 0, 1000,
+			[40]byte{},0, time.Now().Unix(), [64]byte{}, false, 0}
+
+		if err := StoreTxEth(dc.DB, mockTx); err != nil {
+			log.Panic("store tx to db failed: ", err)
+			return err
+		}
+	}
+	// 1.2 write gt to db with merging and pruning
+	if !isTU {
+		if err := StoreTxEth(dc.DBMerging, gt); err != nil {
+			log.Panic("store tx to dbmerging failed: ", err)
+			return err
+		}
+	} else {
+		if err := StoreTxEth(dc.DBMerging, gt); err != nil {
+			log.Panic("store tx to dbmerging failed: ", err)
+			return err
+		}
+		if err := RefreshTCLEth(dc.DBMerging, tc); err!=nil {
+			log.Panic("refresh tcl to dbmerging failed: ", err)
+			return err
+		}
+	}
+
+	/*// write to DB
+	err := StoreTx(dc.DB, *tx)
+	if err != nil {
+		log.Panic("store tx failed: ", err)
+	}
+	for _, v := range citedChangeTips {
+		PutTip(dc.DB, *v)
+	}
+	PutTip(dc.DB, *newTip)*/
+
+	/*if local {
+		fmt.Println("Receive tx locally: ", tx)
+
+		// remove old tips and add new tip
+		var index []int
+		oldTips := tx.Validate
+		for i, t := range dc.Tips {
+			if bytes.Equal(t.TipID, oldTips[0]) || bytes.Equal(t.TipID, oldTips[1]) {
+				index = append(index, i)
+			}
+		}
+
+		newTip := &Tip{tx.Number, tx.ValidateNum, tx.Hash, false, tx.Verification}
+		log.Println("length of oldTips: ", len(index))
+		if len(index) == 2 {
+			dc.Tips[index[0]] = newTip
+			dc.Tips = append(dc.Tips[:index[1]], dc.Tips[index[1]:]...)
+		} else if len(index) == 1 {
+			dc.Tips[index[0]] = newTip
+		} else {
+			dc.Tips = append(dc.Tips, newTip)
+		}
+		// write to DB
+		err := StoreTx(dc.DB, *tx)
+		if err != nil {
+			log.Panic("store tx failed: ", err)
+		}
+		for _, v := range oldTips {
+			RemoveTip(dc.DB, v)
+		}
+		PutTip(dc.DB, *newTip)
+	} else {
+		fmt.Println("Receive tx remotely: ", tx)
+		// set the cited flag and add new tip
+		//oldTips := tx.Validate
+		var citedChangeTips []*Tip
+		//for _, t := range dc.Tips {
+		//	if bytes.Equal(t.TipID, oldTips[0]) || bytes.Equal(t.TipID, oldTips[1]) {
+		//		t.cited = true
+		//		citedChangeTips = append(citedChangeTips, t)
+		//	}
+		//}
+		newTip := &Tip{tx.Hash, false, tx.Verification}
+		dc.Tips = append(dc.Tips, newTip)
+
+		// write to DB
+		err := StoreTx(dc.DB, *tx)
+		if err != nil {
+			log.Panic("store tx failed: ", err)
+		}
+		for _, v := range citedChangeTips {
+			PutTip(dc.DB, *v)
+		}
+		PutTip(dc.DB, *newTip)
+	}*/
+
+	//fmt.Printf("Tips count: %d\n", len(dc.Tips))
+
+	return nil
+}
+
+
 // create a general transaction
 // the return bool value denotes if the general transaction is a transaction union
 func (dc *DagChain) CreateGT(privKey ecdsa.PrivateKey, income [32]byte, sender, receiver string, senderNo, receiverNo int, value int) (GeneralTx, *TxContent, bool) {
@@ -180,6 +329,20 @@ func (dc *DagChain) CreateGT(privKey ecdsa.PrivateKey, income [32]byte, sender, 
 		return gt, tc, true
 	} else {
 		gt := dc.CreateTx(privKey, income, sender, receiver, senderNo, receiverNo, value)
+		return gt, nil, false
+	}
+}
+
+func (dc *DagChainEth) CreateGTEth(privKey ecdsa.PrivateKey, income [64]byte, sender, receiver string, senderNo,
+	receiverNo int64, value int) (GeneralTxEth, *TxContentEth, bool) {
+	senderAccount := AccountEthMap[senderNo]
+	senderAccount.TxCount++
+	if senderAccount.TxCount % config.MERGE_PERIOD == 0 {
+		log.Printf("Create a TU for account: %d, its txCnt is: %d \n", senderAccount.AccountNo, senderAccount.TxCount)
+		gt, tc := dc.CreateTUEth(privKey, income, sender, receiver, senderNo, receiverNo, value)
+		return gt, tc, true
+	} else {
+		gt := dc.CreateTxEth(privKey, income, sender, receiver, senderNo, receiverNo, value)
 		return gt, nil, false
 	}
 }
@@ -224,6 +387,51 @@ func (dc *DagChain) CreateTx(privKey ecdsa.PrivateKey, income [32]byte, sender, 
 	return tx
 }
 
+func (dc *DagChainEth) CreateTxEth(privKey ecdsa.PrivateKey, income [64]byte, sender, receiver string, senderNo,
+	receiverNo int64, value int) *TransactionEth {
+	var validateRef [2][64]byte
+	verification := false
+
+	log.Println("11111 ")
+
+	//index, vTips := dc.SelectTips()
+	_, vTips := dc.SelectTipsEth(senderNo)
+	log.Println("22222 ")
+	for dc.VerifyTips(vTips) == false {
+		_, vTips = dc.SelectTipsEth(senderNo)
+	}
+	log.Println("length of selectedTips: ", len(vTips))
+	lastTx := dc.FindParent(sender)
+
+	for i, v := range vTips {
+		validateRef[i] = v.TipID
+		v.Cited = true
+		if v.Verified {
+			verification = true
+		}
+	}
+
+	log.Println("33333 ")
+
+	txEth := NewTxEth([2]int64{vTips[0].TxNum, vTips[1].TxNum}, lastTx, validateRef, income, sender, senderNo, value, receiver, verification)
+
+	senderAccount := AccountEthMap[senderNo]
+	senderAccount.LastIdNo = txEth.Number
+	senderAccount.WithoutMergeIds[(senderAccount.TxCount-1)%config.MERGE_PERIOD]=txEth.Number
+	senderAccount.WithoutPruneIds = append(senderAccount.WithoutPruneIds, txEth.Number)
+
+	// sign a tx
+	txEth.Sign(privKey)
+	txEth.Nonce = txEth.Pow()
+	txEth.Hash = txEth.HashTx()
+
+	// add the citedcount
+	GXsEth[vTips[0].TxNum].AddCitedCount()
+	GXsEth[vTips[1].TxNum].AddCitedCount()
+
+	return txEth
+}
+
 // create a transaction union
 func (dc *DagChain) CreateTU(privKey ecdsa.PrivateKey, income [32]byte, sender, receiver string, senderNo, receiverNo int, value int) (*TU, *TxContent) {
 	senderAccount := AccountMap[senderNo]
@@ -254,6 +462,35 @@ func (dc *DagChain) CreateTU(privKey ecdsa.PrivateKey, income [32]byte, sender, 
 }
 
 
+func (dc *DagChainEth) CreateTUEth(privKey ecdsa.PrivateKey, income [64]byte, sender, receiver string, senderNo,
+	receiverNo int64, value int) (*TUEth, *TxContentEth) {
+	senderAccount := AccountEthMap[senderNo]
+	tipsNo, _ := dc.SelectTipsEth(senderNo)
+
+	//log.Println("length of selectedTips: ", len(vTips))
+	//lastTx := dc.FindParent(sender)
+
+	log.Println("tipsNo before a TU:", tipsNo)
+
+	if senderAccount.LatestTU!=nil {
+		log.Println("Before a new TU, tu.ValidateNum: ", senderAccount.LatestTU.ValidateNum)
+	}
+	tu, lastTC := NewTUEth(tipsNo, senderAccount, income, value, receiver)
+	log.Println("After a new TU, tu.ValidateNum: ", tu.ValidateNum)
+	senderAccount.LatestTU = tu
+	senderAccount.WithoutPruneIds = append(senderAccount.WithoutPruneIds, tu.Number)
+
+	tu.Signature = [64]byte{}
+
+	// add the citedcount
+	/*GXs[tipsNo[0]].AddCitedCount()
+	GXs[tipsNo[1]].AddCitedCount()*/
+
+	return tu, lastTC
+}
+
+
+
 // Signature a tx with privKey
 func (dc *DagChain) SignTx(tx *Transaction, privKey ecdsa.PrivateKey)  {
 	if tx.IsGenesisTx() {
@@ -273,17 +510,18 @@ func (dc *DagChain) VerifyTx(tx *Transaction) bool {
 }
 
 // Init a dagchain used in daemon
-func Init() (*DagChain, error) {
+func Init() (*DagChain, *DagChainEth, error) {
 	// db will be closed in the main() function
-	db, dbPruning, dbOthers, err := LoadDB()
+	db, dbPruning, dbOthers, dbEth, dbEthPruning, dbEthOthers, err := LoadDB()
 
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	/*tips, err := FetchTips(db)
 	if err != nil {
 		return nil, err
 	}*/
+
 	var tips map[int]*Tip
 	//address := []byte(config.GENESIS_TO_ADDRESS)
 
@@ -291,11 +529,23 @@ func Init() (*DagChain, error) {
 	if tips == nil {
 		tips, err = InitializeGenesisTxs(dbOthers)
 		if err!=nil {
-			return nil, err
+			return nil, nil, err
 		}
 	}
 
-	return &DagChain{tips, db, dbPruning, dbOthers}, nil
+	var tipsEth map[int64]*TipEth
+	//address := []byte(config.GENESIS_TO_ADDRESS)
+
+	// if tips is nil, initialize the new dagchain
+	if tipsEth == nil {
+		tipsEth, err = InitializeGenesisTxsEth(dbEthOthers)
+		if err!=nil {
+			return nil, nil, err
+		}
+	}
+
+	return &DagChain{tips, db, dbPruning, dbOthers},
+	&DagChainEth{tipsEth, dbEth, dbEthPruning, dbEthOthers}, nil
 }
 
 /*
@@ -348,6 +598,56 @@ func InitializeGenesisTxs(db *leveldb.DB) (map[int]*Tip, error) {
 	return tips, nil
 }
 
+func InitializeGenesisTxsEth(db *leveldb.DB) (map[int64]*TipEth, error) {
+	var tips = make(map[int64]*TipEth)
+	//for i, addr:= range(config.GenesisAddresses) {
+	//	genesisTx := NewGenesisTx(config.GENESIS_VALUE, []byte(addr))
+	//	genesisTx.Nonce = genesisTx.Pow()
+	//	genesisTx.Hash = genesisTx.HashTx()
+	//	genesisID := genesisTx.Hash
+	//	genesisTx.SenderNum = 0-i-1
+	//
+	//	acc := CreateNewAccount(addr, genesisTx.Value)
+	//	acc.LastIdNo = -1
+	//	AccountMap[i] = acc
+	//	AccountAddr2Int[addr] = i
+	//	AccountInt2Addr[i] = addr
+	//
+	//	GXs[genesisTx.Number] = genesisTx
+	//
+	//	if i < config.TIPS_COUNT {
+	//		//tips = append(tips, &Tip{genesisTx.Number, genesisID, false, false})
+	//		tips[i] = &Tip{genesisTx.Number, genesisID, false, false}
+	//	}
+	//	// write to db
+	//	if err := StoreTx(db, *genesisTx); err != nil {
+	//		return nil, err
+	//	}
+	//	if err := StoreAccount(db, *acc); err != nil {
+	//		return nil, err
+	//	}
+	//	/*if err := StoreTips(db, tips); err != nil {
+	//		return nil, err
+	//	}*/
+	//}
+
+	var genesisTxEth *TransactionEth
+	var tip *TipEth
+	for i:=0; i< config.TIPS_COUNT; i++ {
+		genesisTxEth = NewGenesisTxEth(config.GENESIS_VALUE, -int64(i))
+		tip = &TipEth{
+			TxNum:    genesisTxEth.Number,
+			TipID:    [64]byte{},
+			Cited:    false,
+			Verified: false,
+		}
+		tips[int64(-i)] = tip
+		GXsEth[int64(-i)] = genesisTxEth
+	}
+
+	return tips, nil
+}
+
 /*
 	--------------
      tips related
@@ -388,6 +688,12 @@ func (dc *DagChain) FindTips() map[int]*Tip {
 	return dc.Tips
 }
 
+// @return tips of DagChain TODO
+func (dc *DagChainEth) FindTipsEth() map[int64]*TipEth {
+
+	return dc.TipsEth
+}
+
 // @return last tx's hash of special Account address
 func (dc *DagChain) FindParent(account string) [32]byte {
 	// Todo read db file of Account to find an Account
@@ -412,6 +718,17 @@ func (dc *DagChain) FindParent(account string) [32]byte {
 			return tip, tx
 		}
 	}*/
+}
+
+func (dc *DagChainEth) FindParent(account string) [64]byte {
+	// Todo read db file of Account to find an Account
+
+	acc, err := FetchAccountEth(dc.DBOthers, account)
+	if err != leveldb.ErrNotFound {
+		return [64]byte{}
+	}
+
+	return acc.LastId
 }
 
 // select two tips to verify, randomly
@@ -471,6 +788,75 @@ func (dc *DagChain) SelectTips(senderNo int) ([2]int, [2]*Tip) {
 	return index, twoTips
 }
 
+func (dc *DagChainEth) SelectTipsEth(senderNo int64) ([2]int64, [2]*TipEth) {
+	allTips := dc.FindTipsEth()
+	var tipsSlice = make([]int64, len(allTips))
+	i := 0
+	for n:= range allTips {
+		tipsSlice[i] = n
+		i++
+	}
+	//log.Printf("alltips: %v\n", allTips)
+
+	var twoTips [2]*TipEth
+	var index [2]int64
+
+	rand.Seed(time.Now().UnixNano())
+	first := rand.Intn(len(allTips))
+	//log.Printf("first: %d\n", first)
+
+	firstTipNum := tipsSlice[first]
+
+	log.Printf("firstTipNum: %d\n", firstTipNum)
+
+	log.Printf("allTips[firstTipNum].TxNum: %d\n", allTips[firstTipNum].TxNum)
+
+	for GXsEth[allTips[firstTipNum].TxNum].FetchSenderNum() == senderNo {
+		first = rand.Intn(len(allTips))
+		firstTipNum = tipsSlice[first]
+		log.Printf("firstTipNum: %d\n", firstTipNum)
+		log.Printf("accFrom: %s\n", AccountEthMap[senderNo].Account)
+	}
+
+	log.Printf("xxxxxxxxxxxxxxxxxxxxxx ")
+	second := rand.Intn(len(allTips))
+	/*for GXsEth[allTips[secondTipNum].TxNum].FetchSenderNum() == senderNo ||
+		GXsEth[allTips[secondTipNum].TxNum].FetchSenderNum() == GXsEth[allTips[firstTipNum].TxNum].FetchSenderNum() {
+		second = rand.Intn(len(allTips))
+		secondTipNum = tipsSlice[second]
+	}*/
+
+	fmt.Printf("second: %d\n", second)
+	for second == first {
+		second = rand.Intn(len(allTips))
+		fmt.Printf("second: %d\n", second)
+	}
+
+	secondTipNum := tipsSlice[second]
+
+	/*for first == second {
+		log.Println("first == second")
+		second = rand.Intn(len(allTips))
+	}*/
+
+	log.Printf("yyyyyyyyyyyyyyyyyyyyyyy ")
+
+	index[0] = allTips[firstTipNum].TxNum
+	index[1] = allTips[secondTipNum].TxNum
+
+	twoTips[0] = allTips[firstTipNum]
+	twoTips[1] = allTips[secondTipNum]
+
+
+	/*twoTips := [2]*Tip {
+		&Tip{[]byte("tseafooler111111111"), false},
+		&Tip{[]byte("tseafooler222222222"), false},
+	}
+	index := [2]int {2, 3}*/
+
+	return index, twoTips
+}
+
 // verify selected tips tx
 func (dc *DagChain) VerifyTips(tips [2]*Tip) bool {
 	// verify selected tx
@@ -484,5 +870,9 @@ func (dc *DagChain) VerifyTips(tips [2]*Tip) bool {
 		}
 	}*/
 
+	return true
+}
+
+func (dc *DagChainEth) VerifyTips(tips [2]*TipEth) bool {
 	return true
 }

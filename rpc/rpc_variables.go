@@ -4,6 +4,7 @@ import "Jight/dagchain"
 
 type Jightd struct{
 	DC *dagchain.DagChain
+	DCEth *dagchain.DagChainEth
 }
 
 type GetBalanceCMD struct {
@@ -28,7 +29,18 @@ type SendCmd struct {
 	Amount int
 }
 
+type SendEthCmd struct {
+	From string
+	To string
+	IncomeTx string
+	Amount int
+}
+
 type SendReply struct {
+	Tx string
+}
+
+type SendEthReply struct {
 	Tx string
 }
 

@@ -35,12 +35,38 @@ func StoreTx2(db *leveldb.DB, gt GeneralTx) error {
 	return nil
 }
 
+func StoreTxEth(db *leveldb.DB, gt GeneralTxEth) error {
+	blockdata := gt.Serialize()
+	numberString := strconv.FormatInt(gt.FetchNumber(), 10)
+	numberBytes := []byte(numberString)
+	err := db.Put(numberBytes,[]byte(blockdata), nil)
+	if err!=nil {
+		return errors.New("store tx error")
+	}
+	//_ = db.Put(bytes.Join([][]byte{[]byte("t"),tx.Hash[:]},[]byte{}),[]byte(blockdata),nil)
+
+	/*if gt.FetchNumber() == 880 {
+		fmt.Println("key 880 in StoreTxs:", numberBytes)
+	}*/
+	return nil
+}
+
 // for test: remove tx from db
 func RemoveTx2(db *leveldb.DB, gtID int) error {
 	numberString := strconv.Itoa(gtID)
 	numberBytes := []byte(numberString)
 	key := bytes.Join([][]byte{[]byte("t"), numberBytes}, []byte{})
 	err := db.Delete(key,nil)
+	if err != nil {
+		return errors.New("remove failed")
+	}
+	return nil
+}
+
+func RemoveTxEth(db *leveldb.DB, gtID int64) error {
+	numberString := strconv.FormatInt(gtID, 10)
+	numberBytes := []byte(numberString)
+	err := db.Delete(numberBytes,nil)
 	if err != nil {
 		return errors.New("remove failed")
 	}
@@ -73,6 +99,16 @@ func StoreTCL2(db *leveldb.DB, tcl *TxContentList) error {
 	return nil
 }
 
+func StoreTCLEth(db *leveldb.DB, tcl *TxContentEthList) error {
+	key := []byte("l")
+	log.Println("key:", key)
+	err :=db.Put(key, tcl.Serialize(), nil)
+	if err != nil {
+		return errors.New("storeTCL error")
+	}
+	return nil
+}
+
 // for test: fetch tcl to db
 func FetchTCL2(db *leveldb.DB) *TxContentList {
 	key := []byte("l")
@@ -83,6 +119,18 @@ func FetchTCL2(db *leveldb.DB) *TxContentList {
 		return nil
 	}
 	tcl := DeserializeTCL(data)
+	return &tcl
+}
+
+func FetchTCLEth(db *leveldb.DB) *TxContentEthList {
+	key := []byte("l")
+	log.Println("key:", key)
+	data, err :=db.Get(key, nil)
+	if err != nil {
+		log.Println("FetchTCL error: ", err.Error())
+		return nil
+	}
+	tcl := DeserializeTCLEth(data)
 	return &tcl
 }
 
@@ -98,6 +146,19 @@ func RefreshTCL2(db *leveldb.DB, tc *TxContent) error {
 	newTcs = append(newTcs, *tc)
 	newTcl := TxContentList(newTcs)
 	return StoreTCL2(db, &newTcl)
+}
+
+func RefreshTCLEth(db *leveldb.DB, tc *TxContentEth) error {
+	key := []byte("l")
+	log.Println("key:", key)
+	tcl := FetchTCLEth(db)
+	var newTcs []TxContentEth
+	if tcl != nil {
+		newTcs = *tcl
+	}
+	newTcs = append(newTcs, *tc)
+	newTcl := TxContentEthList(newTcs)
+	return StoreTCLEth(db, &newTcl)
 }
 
 // for test: compact the db
@@ -129,6 +190,18 @@ func StoreAccount(db *leveldb.DB, acc Account) error {
 	return nil
 }
 
+// nq: store accountEth to db
+func StoreAccountEth(db *leveldb.DB, acc AccountEth) error {
+	accountData := acc.Serialize()
+	key := []byte(acc.Account)
+	log.Println("Store key: ", key)
+	if err := db.Put(key, accountData,nil); err!=nil {
+		log.Fatal(err)
+		return err
+	}
+	return nil
+}
+
 // nq: get account via address from db
 func FetchAccount(db *leveldb.DB, addr string) (*Account, error) {
 	key := bytes.Join([][]byte{[]byte("a"), []byte(addr)},[]byte{})
@@ -139,6 +212,18 @@ func FetchAccount(db *leveldb.DB, addr string) (*Account, error) {
 		return nil, err
 	}
 	acc := DeserializeAcc(data)
+	return &acc, nil
+}
+
+// nq: get account via address from db
+func FetchAccountEth(db *leveldb.DB, addr string) (*AccountEth, error) {
+	key := []byte(addr)
+	//fmt.Println("Fetch key: ", key)
+	data, err := db.Get(key,nil)
+	if err != nil {
+		return nil, err
+	}
+	acc := DeserializeAccEth(data)
 	return &acc, nil
 }
 
@@ -185,21 +270,35 @@ func FetchTips(db *leveldb.DB) ([]*Tip, error) {
 
 
 // open db instance or create a db if not exist
-func LoadDB() (*leveldb.DB, *leveldb.DB, *leveldb.DB, error) {
+func LoadDB() (*leveldb.DB, *leveldb.DB, *leveldb.DB, *leveldb.DB, *leveldb.DB, *leveldb.DB, error) {
 	log.Println("LoadDB() function is called")
 	db, err := leveldb.OpenFile("Jightdb",nil)
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, nil, nil, nil, nil, err
 	}
 	dbPruning, err := leveldb.OpenFile("JightdbMerging",nil)
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, nil, nil, nil, nil, err
 	}
 
 	dbOthers, err := leveldb.OpenFile("JightdbOthers",nil)
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, nil, nil, nil, nil, err
 	}
-	return db, dbPruning, dbOthers, nil
+
+	dbEth, err := leveldb.OpenFile("JightdbEth",nil)
+	if err != nil {
+		return nil, nil, nil, nil, nil, nil, err
+	}
+	dbEthPruning, err := leveldb.OpenFile("JightdbEthMerging",nil)
+	if err != nil {
+		return nil, nil, nil, nil, nil, nil, err
+	}
+
+	dbEthOthers, err := leveldb.OpenFile("JightdbEthOthers",nil)
+	if err != nil {
+		return nil, nil, nil, nil, nil, nil, err
+	}
+	return db, dbPruning, dbOthers, dbEth, dbEthPruning, dbEthOthers, nil
 }
 
