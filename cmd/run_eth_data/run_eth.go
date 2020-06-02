@@ -7,6 +7,7 @@ import (
 	"log"
 	"net/rpc"
 	"os"
+	"os/exec"
 	"strconv"
 )
 
@@ -79,9 +80,20 @@ func refreshTips(rpcPort string) {
 	if err != nil {
 		log.Fatal("Send error: ", err)
 	} else {
-		fmt.Printf("Before refresh, tips cnt: %d; after refresh, tips cnt: %d\n", rtr.TipsCntBefore,
-		rtr.TipsCntAfter)
+		//fmt.Printf("Before refresh, tips cnt: %d; after refresh, tips cnt: %d\n", rtr.TipsCntBefore,
+		//rtr.TipsCntAfter)
 	}
+}
+
+func PrintDBSize(dirPath string) error {
+	filePath := dirPath + "/JightdbEth*"
+	cmd := exec.Command("/bin/bash", "-c", "du -B K "+filePath)
+	output, err := cmd.Output()
+	if err != nil {
+		return err
+	}
+	fmt.Println(string(output))
+	return nil
 }
 
 func main() {
@@ -106,6 +118,7 @@ func main() {
 	rpcPort := os.Args[2]
 
 	var blockNum = ""
+	var blockNumInt int
 
 	for i := 0; ; i++{
 		line, err := reader.Read()
@@ -120,8 +133,15 @@ func main() {
 				refreshTips(rpcPort)
 			}
 			if blockNum != line[0] {
-				fmt.Printf("Process block: %s\n", blockNum)
-				blockNum = line[0]
+				blockNumInt, _ = strconv.Atoi(blockNum)
+				if blockNumInt%100000 == 0 {
+					fmt.Printf("Process block: %s\n", blockNum)
+					err := PrintDBSize("../jightd")
+					if err != nil {
+						log.Fatal(err)
+					}
+					blockNum = line[0]
+				}
 			}
 		}
 	}
