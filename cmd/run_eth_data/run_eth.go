@@ -113,11 +113,10 @@ func main() {
 
 		if line[4] != "None" {
 			sendTx(rpcPort, line[3], line[4], "", 100)
-		}
-		fmt.Printf("%d th line, from: %s\n", i, line[3])
-
-		if i % 100 == 0 {
-			refreshTips(rpcPort)
+			fmt.Printf("%d th line, from: %s\n", i, line[3])
+			if i % 100 == 0 {
+				refreshTips(rpcPort)
+			}
 		}
 	}
 
