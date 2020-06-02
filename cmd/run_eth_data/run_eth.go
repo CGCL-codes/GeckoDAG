@@ -105,6 +105,8 @@ func main() {
 
 	rpcPort := os.Args[2]
 
+	var blockNum = ""
+
 	for i := 0; ; i++{
 		line, err := reader.Read()
 		if err!=nil {
@@ -113,9 +115,13 @@ func main() {
 
 		if line[4] != "None" {
 			sendTx(rpcPort, line[3], line[4], "", 100)
-			fmt.Printf("%d th line, from: %s\n", i, line[3])
+			//fmt.Printf("%d th line, from: %s\n", i, line[3])
 			if i % 100 == 0 {
 				refreshTips(rpcPort)
+			}
+			if blockNum != line[0] {
+				fmt.Printf("Process block: %s\n", blockNum)
+				blockNum = line[0]
 			}
 		}
 	}
