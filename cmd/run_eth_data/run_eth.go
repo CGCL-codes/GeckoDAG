@@ -105,7 +105,7 @@ func main() {
 
 	rpcPort := os.Args[2]
 
-	for i := 0; i<10000; i++{
+	for i := 0; ; i++{
 		line, err := reader.Read()
 		if err!=nil {
 			break
