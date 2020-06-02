@@ -12,8 +12,7 @@ import (
 )
 
 const (
-	FileDirPath = "/home/seafooler/ethTx_data"
-	IntermediateSuffixrName = "_NormalTransaction"
+	FileDirPath = "/mnt/data/ethTx_data"
 	FileSuffix = "_NormalTransaction.csv"
 	Factor = 1000000
 )
@@ -35,7 +34,7 @@ func MakeFullFileName(num int) string {
 	startNum := num*Factor
 	stopNum := (num+1)*Factor - 1
 	prefix := strconv.Itoa(startNum) + "to" + strconv.Itoa(stopNum)
-	fullFileName := FileDirPath + "/" + prefix + IntermediateSuffixrName + "/" + prefix + FileSuffix
+	fullFileName := FileDirPath + "/" + prefix + FileSuffix
 	fmt.Println("FileName: ", fullFileName)
 	return fullFileName
 }
@@ -92,7 +91,7 @@ func PrintDBSize(dirPath string) error {
 	if err != nil {
 		return err
 	}
-	fmt.Println(string(output))
+	fmt.Print(string(output))
 	return nil
 }
 
@@ -120,31 +119,38 @@ func main() {
 	var blockNum = ""
 	var blockNumInt int
 
+	// discard the title
+	reader.Read()
+
 	for i := 0; ; i++{
 		line, err := reader.Read()
 		if err!=nil {
 			break
 		}
-
 		if line[4] != "None" {
-			sendTx(rpcPort, line[3], line[4], "", 100)
-			//fmt.Printf("%d th line, from: %s\n", i, line[3])
-			if i % 100 == 0 {
-				refreshTips(rpcPort)
-			}
 			if blockNum != line[0] {
+				blockNum = line[0]
 				blockNumInt, _ = strconv.Atoi(blockNum)
-				if blockNumInt%100000 == 0 {
-					fmt.Printf("Process block: %s\n", blockNum)
+				if blockNumInt%10000 == 1 {
+					fmt.Printf("After processing block: %d\n", blockNumInt-1)
 					err := PrintDBSize("../jightd")
 					if err != nil {
 						log.Fatal(err)
 					}
-					blockNum = line[0]
 				}
 			}
+			sendTx(rpcPort, line[3], line[4], "", 100)
+                        //fmt.Printf("%d th line, from: %s\n", i, line[3])
+                        if i % 100 == 0 {
+                                refreshTips(rpcPort)
+                        }
 		}
 	}
+	fmt.Printf("After processing the %s\n", fileNum)
+	err = PrintDBSize("../jightd")
+        if err != nil {
+        	log.Fatal(err)
+        }
 
 }
 
